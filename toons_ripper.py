@@ -11,6 +11,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.support.ui import WebDriverWait
 
+social_networks = ["youtube", "t.me", "facebook"]
+
 
 class LinkShortener(enum.Enum):
     undermined = 0
@@ -28,20 +30,35 @@ class LinkParser:
         req = requests.get(self.raw_links_page)
         self.soup = BeautifulSoup(req.text, "html.parser")
         self.title: str = self.soup.select_one(" header > div > h1").string
+        print(self.title)
 
     def link_scraper(self):
         captcha_links = []
 
-        links_element = self.soup.find_all(any, {"style": "text-align: center;"})
+        # dti_rtilinks = self.soup.find(any, {"class": "dti"})
+        # if not dti_rtilinks:
+        #     dti_rtilinks = self.soup.find(any, {"class": "entry-content"})
+        dti_rtilinks = self.soup.find(any, {"class": "entry-content"})
+        if dti_rtilinks:
+            links_block = dti_rtilinks.find_all("a")
+            link_elements = [link for link in links_block if
+                             not any(social_link in link.get('href') for social_link in social_networks)]
+        else:
+            link_elements = [item.select_one("a") for item in self.soup.find_all(any, {"style": "text-align: center;"})]
 
-        for item in links_element:
+        for link_element in link_elements:
 
-            link_element = item.select_one("a")
             previous_element = link_element.previous_sibling
+            # previous_element_is_shit = previous_element is None
 
             if previous_element:
-                weird_shit = previous_element.text.split(' :', 1)[0],
-                name = weird_shit[0]
+                previous_element_text = previous_element.text
+                if previous_element_text != '\n':
+                    weird_shit = previous_element_text.split(' :', 1)[0],
+                    # Weird because completing it in one line breaks the code somehow
+                    name = weird_shit[0]
+                else:
+                    name = link_element.text
             else:
                 name = link_element.text
 
@@ -52,6 +69,7 @@ class LinkParser:
                 'link': link,
             })
 
+        # print(captcha_links)
         return captcha_links
 
 
@@ -82,6 +100,8 @@ class LinkManger:
             # wait = WebDriverWait(driver, 20)
 
             time.sleep(1)
+
+            # time.sleep(30)
 
             for link in self.captcha_links:
                 driver.get(link['link'])
