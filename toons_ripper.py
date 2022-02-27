@@ -1,12 +1,10 @@
+import enum
 import json
 import os
 import time
-import enum
 
-import requests
-
-from bs4 import BeautifulSoup
 from selenium import webdriver
+from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.support.ui import WebDriverWait
@@ -22,134 +20,108 @@ class LinkShortener(enum.Enum):
     surfsees = 4
 
 
-class LinkParser:
-    def __init__(self, raw_links_page: str, ):
-        # raw_links_page
-
-        self.raw_links_page = raw_links_page
-        req = requests.get(self.raw_links_page)
-        self.soup = BeautifulSoup(req.text, "html.parser")
-        self.title: str = self.soup.select_one(" header > div > h1").string
-        print(self.title)
-
-    def link_scraper(self):
-        captcha_links = []
-
-        # dti_rtilinks = self.soup.find(any, {"class": "dti"})
-        # if not dti_rtilinks:
-        #     dti_rtilinks = self.soup.find(any, {"class": "entry-content"})
-        dti_rtilinks = self.soup.find(any, {"class": "entry-content"})
-        if dti_rtilinks:
-            links_block = dti_rtilinks.find_all("a")
-            link_elements = [link for link in links_block if
-                             not any(social_link in link.get('href') for social_link in social_networks)]
-        else:
-            link_elements = [item.select_one("a") for item in self.soup.find_all(any, {"style": "text-align: center;"})]
-
-        for link_element in link_elements:
-
-            previous_element = link_element.previous_sibling
-            # previous_element_is_shit = previous_element is None
-
-            if previous_element:
-                previous_element_text = previous_element.text
-                if previous_element_text != '\n':
-                    weird_shit = previous_element_text.split(' :', 1)[0],
-                    # Weird because completing it in one line breaks the code somehow
-                    name = weird_shit[0]
-                else:
-                    name = link_element.text
-            else:
-                name = link_element.text
-
-            link = link_element.get('href')
-
-            captcha_links.append({
-                'name': name,
-                'link': link,
-            })
-
-        # print(captcha_links)
-        return captcha_links
-
-
 class LinkManger:
-    def __init__(self, captcha_links: list):
+    def __init__(self, raw_links_page: str, headless: bool = False):
+        self.raw_links_page = raw_links_page
+        self.page_title: str
+        self.social_networks = ["youtube", "t.me", "facebook"]
         self.shortener_type: LinkShortener = LinkShortener.undermined
-        self.captcha_links = captcha_links
+        self.captcha_links = []
+        self.file_links = []
         self.browser_data_location = "browser_data"
         self.options = webdriver.ChromeOptions()
         self.options.add_argument(f'user-data-dir={os.getcwd()}/{self.browser_data_location}')
-        self.options.add_argument("--headless")
+        if headless:
+            self.options.add_argument("--headless")
+        self.driver = webdriver.Chrome(options=self.options, )
+        self.wait = WebDriverWait(self.driver, 20)
+        time.sleep(.5)
+        self.driver.get(self.raw_links_page)
+        self.__set_page_title()
+        self.__set_captcha_links()
+        # self.__set_shortener()
+        self.__get_links()
+        self.driver.quit()
 
-    def __set_shortener(self, driver):
+    def __set_page_title(self):
+        self.page_title = self.driver.title
+        print(self.page_title)
+
+    def __set_captcha_links(self, ):
+
+        try:
+            links_block = self.driver.find_element(by=By.CSS_SELECTOR, value="*[class='entry-content']").find_elements(
+                by=By.TAG_NAME, value='a')
+
+        except NoSuchElementException:
+            links_block = self.driver.find_elements(by=By.CSS_SELECTOR, value="a[rel*='noopener']")
+
+        link_elements = [link for link in links_block if
+                         not any(social_link in link.get_attribute('href') for social_link in social_networks)]
+        self.captcha_links = [link.get_attribute('href') for link in link_elements]
+        # print(self.captcha_links)
+
+    def __set_shortener(self):
         if self.shortener_type == LinkShortener.undermined:
-            if LinkShortener.yoshare.name in driver.current_url:
+            if LinkShortener.yoshare.name in self.driver.current_url:
                 self.shortener_type = LinkShortener.yoshare
-            elif LinkShortener.eductin.name in driver.current_url:
+            elif LinkShortener.eductin.name in self.driver.current_url:
                 self.shortener_type = LinkShortener.eductin
-            elif LinkShortener.surfsees.name in driver.current_url:
+            elif LinkShortener.surfsees.name in self.driver.current_url:
                 self.shortener_type = LinkShortener.surfsees
             else:
                 self.shortener_type = LinkShortener.unknown
-                print(f"Haven't seen this shortener before: {driver.current_url}")
+                print(f"Haven't seen this shortener before: {self.driver.current_url}")
 
-    def get_links(self):
-        file_links = []
-        with webdriver.Chrome(options=self.options, ) as driver:
-            # wait = WebDriverWait(driver, 20)
+    def __get_links(self):
+
+        for link in self.captcha_links:
+            self.driver.get(link)
 
             time.sleep(1)
+            # print(self.driver.current_url)
 
-            # time.sleep(30)
-
-            for link in self.captcha_links:
-                driver.get(link['link'])
-
-                time.sleep(1)
-
-                self.__set_shortener(driver)
-                if self.shortener_type == LinkShortener.yoshare:
-                    destination_link = self.solve_yoshare(driver)
-                elif self.shortener_type == LinkShortener.eductin or self.shortener_type == LinkShortener.surfsees:
-                    destination_link = self.general_solver(driver)
-
-                file_links.append({
-                    "name": link['name'],
-                    "link": destination_link,
-                })
-                print(file_links[-1])
-
-            return file_links
-
-    def get_destination(self, driver, wait):
-
-        if len(driver.window_handles) == 2:
-            driver.close()
-            driver.switch_to.window(driver.window_handles[0])
-        if "rtilinks" in driver.current_url:
-            get_download_link_xpath = '/html/body/section/div/div/div/center/a'
-            watch_online_iframe_xpath = '/html/body/iframe[2]'
-            watch_online_xpath = '//*[@id="download-hidden"]/a'
-
-            if "quick" in driver.current_url:
-                wait.until(ec.element_to_be_clickable((By.XPATH, get_download_link_xpath))).click()
-                wait.until(ec.frame_to_be_available_and_switch_to_it((By.XPATH, watch_online_iframe_xpath)))
-                wait.until(ec.element_to_be_clickable((By.XPATH, watch_online_xpath))).click()
-            # elif "fast" in driver.current_url:
+            self.__set_shortener()
+            if self.shortener_type == LinkShortener.yoshare:
+                destination_link = self.solve_yoshare()
+            elif self.shortener_type == LinkShortener.eductin or self.shortener_type == LinkShortener.surfsees:
+                destination_link = self.general_solver()
             else:
-                wait.until(ec.element_to_be_clickable((By.XPATH, get_download_link_xpath))).click()
+                destination_link = "Unknown shortener"
+
+            self.file_links.append(destination_link)
+            print(self.file_links[-1])
+
+    def get_destination(self, ):
+
+        if len(self.driver.window_handles) == 2:
+            self.driver.close()
+            self.driver.switch_to.window(self.driver.window_handles[0])
+        if "rtilinks" in self.driver.current_url:
+            get_download_link_xpath = '/html/body/section/div/div/div/center/a'
+
+            self.wait.until(ec.element_to_be_clickable((By.XPATH, get_download_link_xpath))).click()
+
+            # Now let's check if the video is fmbeded
+            if "quick" in self.driver.current_url:
+                watch_online_iframe_xpath = '/html/body/iframe[2]'
+                watch_online_xpath = '//*[@id="download-hidden"]/a'
+
+                self.wait.until(ec.frame_to_be_available_and_switch_to_it((By.XPATH, watch_online_iframe_xpath)))
+                self.wait.until(ec.element_to_be_clickable((By.XPATH, watch_online_xpath))).click()
+
         elif self.shortener_type == LinkShortener.yoshare:
             get_link_2_xpath = '/html/body/div[1]/div/div/div/div[2]/a'
-            wait.until(ec.element_to_be_clickable((By.XPATH, get_link_2_xpath))).click()
+            self.wait.until(ec.element_to_be_clickable((By.XPATH, get_link_2_xpath))).click()
 
-        destination_link = driver.current_url
+        time.sleep(.5)
+        destination_link = self.driver.current_url
 
         return destination_link
 
-    def solve_yoshare(self, driver):
+    def solve_yoshare(self, ):
         # Buttons:
-        wait = WebDriverWait(driver, 20)
+        wait = WebDriverWait(self.driver, 20)
         click_here_to_continue_selector = '#yuidea > input.btn.btn-primary'
         continue_selector = '#btn6'
         get_link_xpath = '/html/body/div[1]/div/div/div[1]/div[6]/a'
@@ -160,17 +132,17 @@ class LinkManger:
         wait.until(ec.element_to_be_clickable((By.XPATH, get_link_xpath))).click()
         time.sleep(5)
 
-        destination_link = self.get_destination(driver, wait)
+        destination_link = self.get_destination()
         return destination_link
 
-    def general_solver(self, driver):
-        wait = WebDriverWait(driver, 20)
+    def general_solver(self, ):
+        wait = WebDriverWait(self.driver, 20)
 
         buttons = ['//*[@id="landing"]/div[2]/center/img', '//*[@id="generater"]/img', '//*[@id="showlink"]']
         for button in buttons:
             wait.until(ec.element_to_be_clickable((By.XPATH, button))).click()
 
-        destination_link = self.get_destination(driver, wait)
+        destination_link = self.get_destination()
         return destination_link
 
 
