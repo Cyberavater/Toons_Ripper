@@ -113,10 +113,6 @@ class LinkManger:
                 self.wait.until(ec.frame_to_be_available_and_switch_to_it((By.XPATH, watch_online_iframe_xpath)))
                 self.wait.until(ec.element_to_be_clickable((By.XPATH, watch_online_xpath))).click()
 
-        elif self.shortener_type == LinkShortener.yoshare:
-            get_link_2_xpath = '/html/body/div[1]/div/div/div/div[2]/a'
-            self.wait.until(ec.element_to_be_clickable((By.XPATH, get_link_2_xpath))).click()
-
         time.sleep(.5)
         destination_link = self.driver.current_url
 
