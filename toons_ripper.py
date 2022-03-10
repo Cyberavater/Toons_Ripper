@@ -94,6 +94,9 @@ class LinkManger:
 
     def get_destination(self, ):
 
+        if "clk.dti.link" in self.driver.current_url:
+            get_link_2_xpath = '/html/body/div[1]/div/div/div/div[2]/a'
+            self.wait.until(ec.element_to_be_clickable((By.XPATH, get_link_2_xpath))).click()
         if len(self.driver.window_handles) == 2:
             self.driver.close()
             self.driver.switch_to.window(self.driver.window_handles[0])
@@ -130,9 +133,10 @@ class LinkManger:
         wait.until(ec.element_to_be_clickable((By.CSS_SELECTOR, continue_selector))).click()
         time.sleep(4)
         wait.until(ec.element_to_be_clickable((By.XPATH, get_link_xpath))).click()
-        time.sleep(5)
 
+        time.sleep(5)
         destination_link = self.get_destination()
+
         return destination_link
 
     def general_solver(self, ):
