@@ -7,7 +7,6 @@ import toons_ripper
 
 url = input("Enter Link:\n")
 raw_link_page = toons_ripper.LinkManger(url)
-# print(raw_link_page.link_scraper())
 file = toons_ripper.FileIO(filename=raw_link_page.page_title, file_links=raw_link_page.file_links)
 file.write_file()
 
