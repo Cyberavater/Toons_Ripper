@@ -9,8 +9,6 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.support.ui import WebDriverWait
 
-social_networks = ["youtube", "t.me", "facebook"]
-
 
 class LinkShortener(enum.Enum):
     undermined = 0
@@ -22,25 +20,32 @@ class LinkShortener(enum.Enum):
 
 class LinkManger:
     def __init__(self, raw_links_page: str, headless: bool = False):
-        self.raw_links_page = raw_links_page
-        self.page_title: str
+
         self.social_networks = ["youtube", "t.me", "facebook"]
         self.shortener_type: LinkShortener = LinkShortener.undermined
+
+        # Link Attributes
+        self.raw_links_page = raw_links_page
+        self.page_title: str
         self.captcha_links = []
         self.file_links = []
+
+        # Setup browser
         self.browser_data_location = "browser_data"
         self.options = webdriver.ChromeOptions()
         self.options.add_argument(f'user-data-dir={os.getcwd()}/{self.browser_data_location}')
         if headless:
             self.options.add_argument("--headless")
         self.driver = webdriver.Chrome(options=self.options, )
-        self.wait = WebDriverWait(self.driver, 20)
-        time.sleep(.5)
+        self.wait = WebDriverWait(self.driver, 10)
+        # time.sleep(.5)
+
+        # Process Links
         self.driver.get(self.raw_links_page)
         self.__set_page_title()
         self.__set_captcha_links()
         # self.__set_shortener()
-        self.__get_links()
+        self.__solve_captcha_links()
         self.driver.quit()
 
     def __set_page_title(self):
@@ -57,9 +62,9 @@ class LinkManger:
             links_block = self.driver.find_elements(by=By.CSS_SELECTOR, value="a[rel*='noopener']")
 
         link_elements = [link for link in links_block if
-                         not any(social_link in link.get_attribute('href') for social_link in social_networks)]
+                         not any(social_link in link.get_attribute('href') for social_link in self.social_networks)]
+
         self.captcha_links = [link.get_attribute('href') for link in link_elements]
-        # print(self.captcha_links)
 
     def __set_shortener(self):
         if self.shortener_type == LinkShortener.undermined:
@@ -73,12 +78,12 @@ class LinkManger:
                 self.shortener_type = LinkShortener.unknown
                 print(f"Haven't seen this shortener before: {self.driver.current_url}")
 
-    def __get_links(self):
+    def __solve_captcha_links(self):
 
         for link in self.captcha_links:
             self.driver.get(link)
 
-            time.sleep(1)
+            # time.sleep(1)
             # print(self.driver.current_url)
 
             self.__set_shortener()
@@ -92,45 +97,19 @@ class LinkManger:
             self.file_links.append(destination_link)
             print(self.file_links[-1])
 
-    def get_destination(self, ):
-
-        if "clk.dti.link" in self.driver.current_url:
-            get_link_2_xpath = '/html/body/div[1]/div/div/div/div[2]/a'
-            self.wait.until(ec.element_to_be_clickable((By.XPATH, get_link_2_xpath))).click()
-        if len(self.driver.window_handles) == 2:
-            self.driver.close()
-            self.driver.switch_to.window(self.driver.window_handles[0])
-        if "rtilinks" in self.driver.current_url:
-            get_download_link_xpath = '/html/body/section/div/div/div/center/a'
-
-            self.wait.until(ec.element_to_be_clickable((By.XPATH, get_download_link_xpath))).click()
-
-            # Now let's check if the video is fmbeded
-            if "quick" in self.driver.current_url:
-                watch_online_iframe_xpath = '/html/body/iframe[2]'
-                watch_online_xpath = '//*[@id="download-hidden"]/a'
-
-                self.wait.until(ec.frame_to_be_available_and_switch_to_it((By.XPATH, watch_online_iframe_xpath)))
-                self.wait.until(ec.element_to_be_clickable((By.XPATH, watch_online_xpath))).click()
-
-        time.sleep(.5)
-        destination_link = self.driver.current_url
-
-        return destination_link
-
     def solve_yoshare(self, ):
         # Buttons:
         wait = WebDriverWait(self.driver, 20)
-        click_here_to_continue_selector = '#yuidea > input.btn.btn-primary'
+        click_here_to_continue_selector = 'input.btn.btn-primary'
         continue_selector = '#btn6'
         get_link_xpath = '/html/body/div[1]/div/div/div[1]/div[6]/a'
 
         wait.until(ec.element_to_be_clickable((By.CSS_SELECTOR, click_here_to_continue_selector))).click()
         wait.until(ec.element_to_be_clickable((By.CSS_SELECTOR, continue_selector))).click()
-        time.sleep(4)
+        # time.sleep(4)
         wait.until(ec.element_to_be_clickable((By.XPATH, get_link_xpath))).click()
 
-        time.sleep(5)
+        # time.sleep(5)
         destination_link = self.get_destination()
 
         return destination_link
@@ -138,11 +117,29 @@ class LinkManger:
     def general_solver(self, ):
         wait = WebDriverWait(self.driver, 20)
 
-        buttons = ['//*[@id="landing"]/div[2]/center/img', '//*[@id="generater"]/img', '//*[@id="showlink"]']
+        buttons = ['//*[@id="landing"]', '//*[@id="generater"]', '//*[@id="showlink"]']
         for button in buttons:
             wait.until(ec.element_to_be_clickable((By.XPATH, button))).click()
 
         destination_link = self.get_destination()
+        return destination_link
+
+    def get_destination(self, ):
+
+        if len(self.driver.window_handles) == 2:
+            self.driver.close()
+            self.driver.switch_to.window(self.driver.window_handles[0])
+
+        if "clk.dti.link" in self.driver.current_url:
+            get_link_2_xpath = '/html/body/div[1]/div/div/div/div[2]/a'
+            self.wait.until(ec.element_to_be_clickable((By.XPATH, get_link_2_xpath))).click()
+            destination_link = self.driver.current_url
+        elif "rtilinks" in self.driver.current_url:
+            iframe_css = "iframe[allowfullscreen*='true']"
+            destination_link = self.driver.find_element(By.CSS_SELECTOR, iframe_css).get_attribute("src")
+        else:
+            destination_link = "No valid method found"
+
         return destination_link
 
 
