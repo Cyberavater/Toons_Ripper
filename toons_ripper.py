@@ -126,17 +126,26 @@ class LinkManger:
 
     def get_destination(self, ):
 
+        # Remove extra tab if exists
         if len(self.driver.window_handles) == 2:
             self.driver.close()
             self.driver.switch_to.window(self.driver.window_handles[0])
+            time.sleep(2)  # Without this a bug occurs
 
+        destination_link: str
+
+        # Solver for DeadIndiaToons
         if "clk.dti.link" in self.driver.current_url:
             get_link_2_xpath = '/html/body/div[1]/div/div/div/div[2]/a'
             self.wait.until(ec.element_to_be_clickable((By.XPATH, get_link_2_xpath))).click()
             destination_link = self.driver.current_url
+
+        # Solver for RareToons
         elif "rtilinks" in self.driver.current_url:
             iframe_css = "iframe[allowfullscreen*='true']"
             destination_link = self.driver.find_element(By.CSS_SELECTOR, iframe_css).get_attribute("src")
+
+        # No Solver yet implemented
         else:
             destination_link = "No valid method found"
 
